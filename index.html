@@ -2,193 +2,222 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Tài Xỉu 3D SUPER</title>
+<title>Tài Xỉu 3D VIP</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body{
     margin:0;
     overflow:hidden;
-    background: radial-gradient(circle,#1a1a1a,#000);
+    background: radial-gradient(circle at center,#2c2c2c,#000);
     font-family: Arial;
-    color:white;
 }
 
+/* UI */
 #top{
     position:absolute;
     width:100%;
     text-align:center;
     top:10px;
-    color:gold;
-    font-size:22px;
+    color:#ffd700;
+    font-size:24px;
+    text-shadow:0 0 20px #ffd700;
 }
 
 #score{
     position:absolute;
-    top:50px;
+    top:55px;
     width:100%;
     text-align:center;
-    color:lime;
+    color:#00ff88;
+    font-size:20px;
 }
 
 #result{
     position:absolute;
-    top:80px;
+    top:85px;
     width:100%;
     text-align:center;
+    font-size:20px;
 }
 
-button{
+/* Buttons */
+.btn{
     position:absolute;
-    padding:12px 20px;
+    bottom:110px;
+    padding:14px 30px;
     border:none;
-    border-radius:10px;
+    border-radius:12px;
+    font-size:17px;
+    color:white;
+    box-shadow:0 0 20px rgba(255,255,255,0.4);
 }
 
-#tai{ left:20%; bottom:100px; background:green; color:white; }
-#xiu{ right:20%; bottom:100px; background:red; color:white; }
+#tai{ left:20%; background:#00aa00; }
+#xiu{ right:20%; background:#cc0000; }
 
 #roll{
-    bottom:30px;
+    position:absolute;
+    bottom:35px;
     left:50%;
     transform:translateX(-50%);
-    background:gold;
+    padding:18px 35px;
+    background:#ffd700;
+    border:none;
+    border-radius:15px;
+    font-size:20px;
+    box-shadow:0 0 25px #ffd700;
 }
 </style>
 </head>
 
 <body>
 
-<div id="top">🎲 Tài Xỉu 3D SUPER</div>
+<div id="top">🎲 Tài Xỉu 3D VIP</div>
 <div id="score"></div>
 <div id="result"></div>
 
-<button id="tai" onclick="choose('tai')">TÀI</button>
-<button id="xiu" onclick="choose('xiu')">XỈU</button>
-<button id="roll" onclick="roll()">LẮC</button>
+<button id="tai" class="btn" onclick="choose('tai')">TÀI</button>
+<button id="xiu" class="btn" onclick="choose('xiu')">XỈU</button>
+<button id="roll" onclick="rollDice()">LẮC</button>
+
+<audio id="rollSound" src="https://www.soundjay.com/misc/sounds/dice-roll-1.mp3"></audio>
+<audio id="winSound" src="https://www.soundjay.com/buttons/sounds/button-4.mp3"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
 
 <script>
-// THREE
+// ===== THREE =====
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
-camera.position.set(0,5,8);
+
+const camera = new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,1000);
+camera.position.set(0,2,7);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.5;
 document.body.appendChild(renderer.domElement);
 
-// LIGHT
-scene.add(new THREE.AmbientLight(0xffffff,1.2));
-let light = new THREE.PointLight(0xffffff,1.5);
-light.position.set(5,10,5);
-scene.add(light);
+// ===== LIGHT (SIÊU SÁNG) =====
+scene.add(new THREE.AmbientLight(0xffffff,1.5));
 
-// FLOOR
-let floorGeo = new THREE.PlaneGeometry(20,20);
-let floorMat = new THREE.MeshStandardMaterial({color:0x222222});
-let floor = new THREE.Mesh(floorGeo,floorMat);
+let light1 = new THREE.PointLight(0xffffff,2);
+light1.position.set(5,8,5);
+scene.add(light1);
+
+let light2 = new THREE.PointLight(0xffd700,1.5);
+light2.position.set(-5,5,5);
+scene.add(light2);
+
+// ===== FLOOR =====
+let floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20,20),
+    new THREE.MeshStandardMaterial({color:0x222222, roughness:0.3})
+);
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
-// PHYSICS
-const world = new CANNON.World();
-world.gravity.set(0,-9.82,0);
+// ===== TEXTURE SỐ =====
+function createTexture(num){
+    let c = document.createElement("canvas");
+    c.width = 256; c.height = 256;
+    let ctx = c.getContext("2d");
 
-// ground body
-const groundBody = new CANNON.Body({ mass:0 });
-groundBody.addShape(new CANNON.Plane());
-groundBody.quaternion.setFromEuler(-Math.PI/2,0,0);
-world.addBody(groundBody);
+    ctx.fillStyle="#fff";
+    ctx.fillRect(0,0,256,256);
 
-// DICE
+    ctx.fillStyle="#000";
+    ctx.font="bold 150px Arial";
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.fillText(num,128,140);
+
+    return new THREE.CanvasTexture(c);
+}
+
+// ===== DICE =====
 function createDice(){
-    let geo = new THREE.BoxGeometry(1,1,1);
-    let mat = new THREE.MeshStandardMaterial({color:0xffffff});
-    let mesh = new THREE.Mesh(geo,mat);
-    scene.add(mesh);
-
-    let body = new CANNON.Body({
-        mass:1,
-        shape:new CANNON.Box(new CANNON.Vec3(0.5,0.5,0.5))
-    });
-    world.addBody(body);
-
-    return {mesh,body};
+    let mats=[];
+    for(let i=1;i<=6;i++){
+        mats.push(new THREE.MeshStandardMaterial({
+            map:createTexture(i),
+            metalness:0.4,
+            roughness:0.2
+        }));
+    }
+    return new THREE.Mesh(new THREE.BoxGeometry(),mats);
 }
 
-let dices = [createDice(),createDice(),createDice()];
-
-// GAME
-let score = 1000000;
-let bet = null;
-
-function update(){
-    scoreEl.innerHTML = "💰 "+score;
-}
-update();
-
-function choose(type){
-    bet = type;
-    result.innerHTML = "Chọn: "+type;
+const dice=[];
+for(let i=0;i<3;i++){
+    let d=createDice();
+    d.position.x=(i-1)*2;
+    scene.add(d);
+    dice.push(d);
 }
 
-function roll(){
+// ===== GAME =====
+let score=1000000;
+let bet=null;
+
+function updateUI(){
+    scoreEl.innerHTML="💰 "+score.toLocaleString();
+}
+updateUI();
+
+function choose(t){
+    bet=t;
+    result.innerHTML="Bạn chọn: "+(t=="tai"?"TÀI":"XỈU");
+}
+
+function rollDice(){
     if(!bet){
         alert("Chọn Tài/Xỉu!");
         return;
     }
 
-    dices.forEach((d,i)=>{
-        d.body.position.set(i-1,5,0);
-        d.body.velocity.set(
-            (Math.random()-0.5)*5,
-            5,
-            (Math.random()-0.5)*5
-        );
-        d.body.angularVelocity.set(
-            Math.random()*5,
-            Math.random()*5,
-            Math.random()*5
-        );
+    rollSound.play();
+
+    camera.position.z=5;
+    setTimeout(()=>camera.position.z=7,300);
+
+    let total=0;
+
+    dice.forEach(d=>{
+        let v=Math.floor(Math.random()*6)+1;
+        total+=v;
+
+        d.rotation.x=Math.random()*Math.PI*4;
+        d.rotation.y=Math.random()*Math.PI*4;
     });
+
+    let res= total>=11?"tai":"xiu";
 
     setTimeout(()=>{
-        let total = 0;
-        dices.forEach(()=> total += Math.floor(Math.random()*6)+1);
-
-        let outcome = total>=11 ? "tai":"xiu";
-
-        if(outcome===bet){
-            score += 100000;
-            result.innerHTML = "🎉 Thắng "+total;
+        if(res===bet){
+            score+=100000;
+            winSound.play();
+            result.innerHTML="🎉 Thắng "+total;
         }else{
-            score -= 100000;
-            result.innerHTML = "💀 Thua "+total;
+            score-=100000;
+            result.innerHTML="💀 Thua "+total;
         }
-        update();
-    },2000);
+        updateUI();
+    },700);
 }
 
-// LOOP
+// ===== LOOP =====
 function animate(){
     requestAnimationFrame(animate);
-    world.step(1/60);
-
-    dices.forEach(d=>{
-        d.mesh.position.copy(d.body.position);
-        d.mesh.quaternion.copy(d.body.quaternion);
-    });
-
     renderer.render(scene,camera);
 }
 animate();
 
-// resize
-addEventListener('resize',()=>{
-    camera.aspect = innerWidth/innerHeight;
+// ===== RESIZE =====
+addEventListener("resize",()=>{
+    camera.aspect=innerWidth/innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth,innerHeight);
 });
